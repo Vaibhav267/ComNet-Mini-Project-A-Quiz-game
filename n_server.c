@@ -19,8 +19,8 @@
 #define BACKLOG 10  //how many pending connection queue will hold
 #define maxUser 10
 #define MAX_USERS 10
-#define MAX_ANSWER_TIME 20
-#define LOGIN_WAIT 50
+#define MAX_ANSWER_TIME 15
+#define LOGIN_WAIT 60
 #define TOTAL_QUES "5"
 #define USERNAME 8
 #define PASSWORD 8
@@ -60,25 +60,22 @@ int check_credentials()
 {
 	return 0;
 }
-//void nextQues(char* quesMsg, char* ques, char* optA, char* optB, char* optC, char* optD)
-int nextQues(char* answer,char* quesMsg, int QID)
-{
-	
-    return 0;
-}
 
 //void answerCheck(char* ques, char* optA, char* optB, char* optC, char* optD, char* usrResponse, int rtt, int timeTaken)
-void answerCheck(int fd, char usrResponse[7], int rtt, int timeTaken,char realAnswer[5])
+void answerCheck(int fd, char usrResponse[7], int rtt, int timeTaken,char realAnswer[5],int hintTaken)
 {
     int responseTime, i;
     char quesId[5];
     printf("fd(%d) quesid(%s) response(%c) rtt(%d) timeTaken(%d)\n", fd, usrResponse, usrResponse[5], rtt, timeTaken );
     printf("ANSWER IS:%c\n",realAnswer[0] );
     strncpy(quesId, usrResponse, 5);
-
-    if(realAnswer[0] == usrResponse[5])
+    if(usrResponse[5]=='Z')
     {
-    	printf("RIGHT ANSWER!\n");
+    	printf(":::USER ABSTAINED FROM ANSWERING:::\n");
+    }
+    else if(realAnswer[0] == usrResponse[5])
+    {
+    	printf(":::RIGHT ANSWER!:::\n");
         //printf("%s\n","+++++" );
         responseTime = timeTaken - rtt;
         //printf("Response Time(%d)\n",responseTime);
@@ -89,7 +86,10 @@ void answerCheck(int fd, char usrResponse[7], int rtt, int timeTaken,char realAn
         {
             if(users[i][1] == fd) 
             {
-        		users[i][0] += 10; 
+            	if(hintTaken)
+        		users[i][0] += 5;
+        		else
+        		users[i][0] +=10; 
                 users[i][2] = responseTime;//saving it
                 //printf("%d\n",i );
             }
@@ -97,7 +97,7 @@ void answerCheck(int fd, char usrResponse[7], int rtt, int timeTaken,char realAn
     }
     else
     {
-    	printf("WRONG ANSWER!\n");
+    	printf(":::WRONG ANSWER!:::\n");
     	for(i = 0; i < MAX_USERS; i++) 
         {
             if(users[i][1] == fd) 
@@ -109,6 +109,62 @@ void answerCheck(int fd, char usrResponse[7], int rtt, int timeTaken,char realAn
         }
     }
 }
+
+int answerCheck1(int fd, char usrResponse[7], int rtt, int timeTaken,char realAnswer[5])
+{
+    int responseTime, i, ret=0;
+    char quesId[5];
+    printf("fd(%d) quesid(%s) response(%c) rtt(%d) timeTaken(%d)\n", fd, usrResponse, usrResponse[5], rtt, timeTaken );
+    printf("ANSWER IS:%c\n",realAnswer[0] );
+    strncpy(quesId, usrResponse, 5);
+    if(usrResponse[5]=='Z')
+    {
+
+    	printf(":::USER ABSTAINED FROM ANSWERING:::\n");
+        ret = 3;
+        for(i = 0; i < MAX_USERS; i++) 
+        {
+            if(users[i][1] == fd) 
+            {
+                users[i][2] = 999;//saving it
+                //printf("%d\n",i );
+            }
+        }
+    }
+    else if(realAnswer[0] == usrResponse[5])
+    {
+    	printf(":::RIGHT ANSWER!:::\n");
+        ret = 1;
+        responseTime = timeTaken - rtt;
+        //save it with user id
+
+        //finding userid
+        for(i = 0; i < MAX_USERS; i++) 
+        {
+            if(users[i][1] == fd) 
+            {
+                users[i][2] = responseTime;//saving it
+                //printf("%d\n",i );
+            }
+        }
+    }
+    else
+    {
+    	printf(":::WRONG ANSWER!:::\n");
+        ret = 2;
+    	for(i = 0; i < MAX_USERS; i++) 
+        {
+            if(users[i][1] == fd) 
+            {
+        		users[i][0] -= 5; 
+                users[i][2] = 999;//saving it
+                //printf("%d\n",i );
+            }
+        }
+    }
+    return ret;
+}
+
 void answerCheck2(int fd, char usrResponse[10], int rtt, int timeTaken,char realAnswer[5])
 {
     int responseTime, i;
@@ -117,8 +173,11 @@ void answerCheck2(int fd, char usrResponse[10], int rtt, int timeTaken,char real
     printf("fd(%d) quesid(%s) response(%c) rtt(%d) timeTaken(%d)\n", fd, usrResponse, usrResponse[5], rtt, timeTaken );
     printf("ANSWER IS:%c%c%c%c\n",realAnswer[0],realAnswer[1],realAnswer[2],realAnswer[3] );
     // strncpy(quesId, usrResponse, 5);
-
-    if(realAnswer[0] == usrResponse[5] && realAnswer[1] == usrResponse[6] && realAnswer[2] == usrResponse[7] && realAnswer[3] == usrResponse[8] )
+    if(usrResponse[5]=='Z')
+    {
+    	printf(":::USER ABSTAINED FROM ANSWERING:::\n");
+    }
+    else if(realAnswer[0] == usrResponse[5] && realAnswer[1] == usrResponse[6] && realAnswer[2] == usrResponse[7] && realAnswer[3] == usrResponse[8] )
     {
     	printf("RIGHT ANSWER!\n");
         //printf("%s\n","+++++" );
@@ -183,13 +242,20 @@ int rtt_check(int client_fd)
     ssize_t send_ret, recv_ret;
     char rtt_check[1];
     time_t rtt1, rtt2;
-
+    // printf("h1\n");
+    // recv_ret = recv(client_fd, rtt_check, 1,0);
+    // if(recv_ret == 0)
+    // {
+    //     return -2;
+    // }
+    // printf("h2\n");
     rtt1 = time(NULL);
     send_ret = send(client_fd, "r", 1, 0);
     if(send_ret == 0)
     {
         return -2;
     }
+    // printf("h3\n");
     wrongRecv(send_ret, 1);
     //printf("%s\n","Between two phase of rttCheck" );
     recv_ret = recv(client_fd, rtt_check, 1,0);
@@ -199,6 +265,7 @@ int rtt_check(int client_fd)
         return -2;
     }
     wrongRecv(recv_ret,1);
+    // printf("h4\n");
     //printf("diff(%d)\n",(int) difftime(rtt2,rtt1));
 
     return  (int) difftime(rtt2,rtt1);
@@ -368,7 +435,7 @@ int main(void)
 
     char questions[100][400];
     char hints[100][255];
-    char answers[100][6];
+    char answers[100][10];
     int num_questions=0;
     //LOAD QUESTIONS FROM FILE
     FILE* fp;
@@ -393,7 +460,7 @@ int main(void)
         fgets(optC, 30, (FILE*)fp);    
         fgets(optD, 30, (FILE*)fp);
         fgets(hints[num_questions], 255, (FILE*)fp);
-        fgets(answers[num_questions], 6, (FILE*)fp);
+        fgets(answers[num_questions], 10, (FILE*)fp);
 
         sprintf(quesId,"%d",num_questions+1);    
         strncpy(questions[num_questions],quesId,5);
@@ -490,7 +557,7 @@ int main(void)
     tv.tv_usec=0;
     time_start=time(NULL);
 
-    printf("\n-----------------------------Waiting for users to login for %d seconds.-----------------------------\n",LOGIN_WAIT);
+    printf("\n----Waiting for login for %d seconds.-----\n",LOGIN_WAIT);
     while(select(fdmax + 1, &master_fds , NULL , NULL, &tv) != 0)
     {
     	time_stop=time(NULL);       
@@ -541,7 +608,7 @@ int main(void)
 	                    //Somebody disconnected , get his details and print 
 	                    // getpeername(sd , (struct sockaddr*)&address , \
 	                    //     (socklen_t*)&addrlen);  
-	                    printf("Host disconnected , ip %d\n" , sd);  
+	                    printf("Host disconnected , FD: %d\n" , sd);  
 	                        
 	                    //Close the socket and mark as 0 in list for reuse 
 	                    close( sd );  
@@ -722,6 +789,7 @@ int main(void)
                             }
 
                             while(userActualLoginStatus==-1){
+                            	memset(buffer, '\0', sizeof(buffer));
                             	recv(sd, buffer, 80, 0);
                             	userActualLoginStatus=actualLogin(buffer, sd);
                                 if(userActualLoginStatus==-3){
@@ -779,7 +847,7 @@ int main(void)
         printf("TIME LEFT: %ld %d\n",tv.tv_sec,timeElapsed );
         time_start=time(NULL);
     }
-    printf("::::::::::::LOGIN TIME UP:CLOSING NOT REGISTERED CLIENTS:::::::\n");
+    printf("::::LOGIN TIME UP:CLOSING NOT REGISTERED CLIENTS:::\n");
     for (i = 0; i < MAX_USERS; ++i)
     {
     	if(potential_player[i]!=0)
@@ -792,7 +860,7 @@ int main(void)
     		}
     	}
     }
-    printf("-----------------------------Login Closed. Now starting the QUIZ.-----------------------------\n");
+    printf("---Login Closed. Now starting the QUIZ.----\n");
 
     //for randome seek
     srand(time(NULL));
@@ -828,27 +896,35 @@ int main(void)
     totalQues=5;
     while(totalQues--) 
     {
-    	int yy;int flag=0;
-    	for(yy=0;yy<=fdmax;yy++)
-    	{
-    		if(FD_ISSET(yy, &master_fds))
-    		{
-    			flag=1;
-    			break;
-    		}
-    	}
-    	if(flag==0)
-    		{
-	    		printf("NO CLIENTS!\n");
-	    		close(listen_fd);
-	    		return 0;
-    		}
+        // printf("NU QUESTION\n");
+        int yy;int flag=0;
+        for(yy=0;yy<=fdmax;yy++)
+        {
+            if(FD_ISSET(yy, &master_fds))
+            {
+                flag=1;
+                
+            }
+        }
+        if(flag==0)
+            {
+                printf("NO CLIENTS!\n");
+                close(listen_fd);
+                return 0;
+            }
+        // printf("NU QUESTION2\n");
         //checking who are ready for witing
         if(select(fdmax+1, NULL, &master_fds, NULL, NULL) == -1){//here select will return withh all the descriptors which are 
                                                                 //ready to write , all others have to miss this question
             perror("select");
             exit(1);
         }
+        if(select(fdmax+1, NULL, &master_fds, NULL, NULL) == -1){//here select will return withh all the descriptors which are 
+                                                                //ready to write , all others have to miss this question
+            perror("select");
+            exit(1);
+        }
+        // printf("NU QUESTION3\n");
 
         //setting which question to send
         QID++;
@@ -857,8 +933,10 @@ int main(void)
         for(i = 0; i <= fdmax; i++) {
             if(FD_ISSET(i, &master_fds)) {
                 //rtt check
+                printf("IS SET %d\n", i);
                 current_rtt = rtt_check(i);
                 if(current_rtt == -2) {//connection closed
+                    printf("CLOSED\n");
                     FD_CLR(i, &master_fds);
                     users_deleteFd(i);
                     continue;
@@ -891,7 +969,11 @@ int main(void)
 	    tv.tv_usec=0;
 	    time1=time(NULL);
 
-        while(select(fdmax + 1, &read_fds , NULL , NULL, &tv) != 0) 
+	    int check=select(fdmax + 1, &read_fds , NULL , NULL, &tv);
+	    printf("SELECT IS: %d\n", check);
+	    int processedFD[MAX_USERS]={0};
+	    int num_processedFD=-1;
+        while(check != 0) 
         {
         	time2=time(NULL);
             for(i = 0; i <= fdmax; i++) 
@@ -923,9 +1005,18 @@ int main(void)
                     	}
                         if(QID+1 == atoi(ans)) { //we have received the answer to this question so remove the user from wait answer loop
                             read_fds=master_fds;
+                            num_processedFD++;
+                            processedFD[num_processedFD]=i;
+                            int kkk=0;
+                            while(kkk<=num_processedFD)
+                            {
+                            	FD_CLR(processedFD[kkk],&read_fds);
+                            	printf("CLEARED %d \n",processedFD[kkk]);
+                            	kkk++;
+                            }
                             //FD_CLR(i, &read_fds);
                             //printf("%s i(%d)\n","#######",i );
-                            answerCheck(i ,answer, current_rtt, (int) difftime(time_ans,time_ques),answers[QID]);
+                            int hsl =answerCheck1(i ,answer, current_rtt, (int) difftime(time_ans,time_ques),answers[QID]);
                             //printf("Answer(%c)\n",answer[0]);
                         }
                         else
@@ -944,15 +1035,59 @@ int main(void)
             tv.tv_sec=tv.tv_sec+1;
             printf("TIME LEFT: %ld %d\n",tv.tv_sec,timeElapsed );
             time1=time(NULL);
+            check=select(fdmax + 1, &read_fds , NULL , NULL, &tv);
+		    printf("SELECT IS: %d\n", check);
         }
-        printf("HERE!\n");
+        flag=0;
+        for(yy=0;yy<=fdmax;yy++)
+        {
+            if(FD_ISSET(yy, &master_fds))
+            {
+                flag=1;
+                break;
+            }
+        }
+        if(flag==0)
+            {
+                printf("NO CLIENTS!\n");
+                close(listen_fd);
+                return 0;
+            }
+        //checking who are ready for witing
+        if(select(fdmax+1, NULL, &master_fds, NULL, NULL) == -1){//here select will return withh all the descriptors which are 
+                                                                //ready to write , all others have to miss this question
+            perror("select");
+            exit(1);
+        }
+        printf("CALCULATING SCORES!\n");
+        int minResTime=900;
+        int minUser=-1;
+        for(i=0;i<MAX_USERS;i++)
+        {
+        	if(users[i][1]!=0 && users[i][2]!=999)
+        	{
+        		if(users[i][2]<minResTime)
+        		{
+        			minResTime=users[i][2];
+        			minUser=i;
+        		}
+        	}
+        }
+        if(minUser!=-1)
+      		{
+		      	users[minUser][0]+=10;
+      			printf("USER %d AWARDED POINTS\n" ,users[minUser][1]);
+      		}
+      	else
+      		printf("NO USER ANSWERED CORRECTLY!\n");
+
         //setting question
         //nextQues(quesMsg, ques, optA, optB, optC, optD);
-        printf("Sending Score::: QID(%s) fd(%d)\n",quesMsg,i);
+        printf(":::Sending Score for Q%d::: \n",QID+1);
 
         char scor[100];
         memset(scor, '\0', sizeof(scor));
-        for(i = 0; i <= MAX_USERS; i++) 
+        for(i = 0; i < MAX_USERS; i++) 
         {
             if(FD_ISSET(users[i][1],&master_fds))
 			{
@@ -980,11 +1115,12 @@ int main(void)
 		        wrongRecv(send_ret_size, 80);
 		    }  
     	}
+        printf("HERE2!\n");
     }
     int uid[MAX_USERS];
     int cscore[MAX_USERS];
     int jj=0;
-    for(i=0;i<=MAX_USERS;i++)
+    for(i=0;i<MAX_USERS;i++)
     {
     	if(FD_ISSET(users[i][1],&master_fds))
     	{
@@ -1016,7 +1152,7 @@ int main(void)
     int to_drop=0;
     while(to_drop<(jj/2))
     {
-	    for(i=0;i<=MAX_USERS;i++)
+	    for(i=0;i<MAX_USERS;i++)
 	    {
 	    	if(users[i][1]==uid[to_drop])
 	    	{
@@ -1059,12 +1195,17 @@ int main(void)
     while(totalQues--) 
     {
     	int yy;int flag=0;
+    	int hintTaken[MAX_USERS+10]={0};
     	for(yy=0;yy<=fdmax;yy++)
     	{
     		if(FD_ISSET(yy, &master_fds))
     		{
     			flag=1;
-    			break;
+    			// if( poll(&mypoll, 1, 100) )
+       //          {
+       //              char temp[1];
+       //              recv(i,temp,1,0);
+       //          }
     		}
     	}
     	if(flag==0)
@@ -1120,6 +1261,9 @@ int main(void)
 	    tv.tv_usec=0;
 	    time1=time(NULL);
 
+	    int processedFD[MAX_USERS]={0};
+	    int num_processedFD=-1;
+	    
         while(select(fdmax + 1, &read_fds , NULL , NULL, &tv) != 0) 
         {
         	time2=time(NULL);
@@ -1155,7 +1299,8 @@ int main(void)
                             read_fds=master_fds;
                             if(answer[5]=='H')
                             {
-                            	char* send_hint=questions[QID];
+                            	hintTaken[i]=1;
+                            	char* send_hint=hints[QID];
 				                printf("Sending Hint \n");
 				                //send_ret_size = send(i, send_hint, strlen(send_hint), 0);
 				                send_ret_size = send(i, send_hint, strlen(send_hint), 0);
@@ -1167,7 +1312,18 @@ int main(void)
 				                wrongRecv(send_ret_size, strlen(send_hint));  
                             }
                             else
-                            answerCheck(i ,answer, current_rtt, (int) difftime(time_ans,time_ques),answers[QID]);
+                            {
+                            num_processedFD++;
+                            processedFD[num_processedFD]=i;
+                            int kkk=0;
+                            while(kkk<=num_processedFD)
+                            {
+                            	FD_CLR(processedFD[kkk],&read_fds);
+                            	printf("CLEARED %d \n",processedFD[kkk]);
+                            	kkk++;
+                            }
+                            answerCheck(i ,answer, current_rtt, (int) difftime(time_ans,time_ques),answers[QID],hintTaken[i]);
+                            }
                             //FD_CLR(i, &read_fds);
                             //printf("%s i(%d)\n","#######",i );
                             //printf("Answer(%c)\n",answer[0]);
@@ -1189,14 +1345,14 @@ int main(void)
             printf("TIME LEFT: %ld %d\n",tv.tv_sec,timeElapsed );
             time1=time(NULL);
         }
-        printf("HERE!\n");
+        // printf("HERE!\n");
         //setting question
         //nextQues(quesMsg, ques, optA, optB, optC, optD);
         printf("Sending Score::: QID(%s) fd(%d)\n",quesMsg,i);
 
         char scor[100];
         memset(scor, '\0', sizeof(scor));
-        for(i = 0; i <= MAX_USERS; i++) 
+        for(i = 0; i <MAX_USERS; i++) 
         {
             if(FD_ISSET(users[i][1],&master_fds))
 			{
@@ -1228,7 +1384,7 @@ int main(void)
     int uid2[MAX_USERS];
     int cscore2[MAX_USERS];
     int jj2=0;
-    for(i=0;i<=MAX_USERS;i++)
+    for(i=0;i<MAX_USERS;i++)
     {
     	if(FD_ISSET(users[i][1],&master_fds))
     	{
@@ -1260,7 +1416,7 @@ int main(void)
     int to_drop2=0;
     while(to_drop2<(jj2/2))
     {
-	    for(i=0;i<=MAX_USERS;i++)
+	    for(i=0;i<MAX_USERS;i++)
 	    {
 	    	if(users[i][1]==uid2[to_drop2])
 	    	{
@@ -1425,7 +1581,7 @@ int main(void)
 
         char scor[100];
         memset(scor, '\0', sizeof(scor));
-        for(i = 0; i <= MAX_USERS; i++) 
+        for(i = 0; i < MAX_USERS; i++) 
         {
             if(FD_ISSET(users[i][1],&master_fds))
 			{
@@ -1457,7 +1613,7 @@ int main(void)
     int uid3[MAX_USERS];
     int cscore3[MAX_USERS];
     int jj3=0;
-    for(i=0;i<=MAX_USERS;i++)
+    for(i=0;i<MAX_USERS;i++)
     {
     	if(FD_ISSET(users[i][1],&master_fds))
     	{
